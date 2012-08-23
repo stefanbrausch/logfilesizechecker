@@ -1,5 +1,6 @@
 package hudson.plugins.logfilesizechecker;
 
+import hudson.Extension;
 import hudson.Launcher;
 import hudson.model.AbstractBuild;
 import hudson.model.AbstractProject;
@@ -13,76 +14,120 @@ import hudson.triggers.SafeTimerTask;
 import hudson.triggers.Trigger;
 
 import java.io.IOException;
-import java.util.TimerTask;
+import java.util.logging.Logger;
 
+import net.sf.json.JSONObject;
+
+import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.StaplerRequest;
 
 /**
- * {@link BuildWrapper} that terminates a build if it's log file size too big.
+ * {@link BuildWrapper} that terminates a build if its log file size is too big.
  *
  * @author Stefan Brausch
  */
 public class LogfilesizecheckerWrapper extends BuildWrapper {
-	/**
-	 * If the build log file size bigger than this amount of mBytes, it will be
-	 * terminated.
-	 */
+    
+    /** Set your own max size instaed of using the default */
+    public boolean setOwn;
 
+    /** If the log file for the build has more MB, it will be terminated. */
+    public int maxLogSize;
+
+    /** Fail the build rather than aborting it. */
+    public boolean failBuild;
+    
+    private static final Logger LOG = Logger.getLogger(LogfilesizecheckerWrapper.class.getName());
+    
+    @DataBoundConstructor
+    public LogfilesizecheckerWrapper(int maxLogSize, boolean failBuild, boolean setOwn) {
+        this.maxLogSize = maxLogSize;
+        this.failBuild = failBuild;
+        this.setOwn = setOwn;
+    }
+    
+    @Override
 	public Environment setUp(final AbstractBuild build, Launcher launcher,
 			final BuildListener listener) throws IOException,
 			InterruptedException {
 		class EnvironmentImpl extends Environment {
-			private final TimerTask logtask;
+			private final TimeoutTimerTask logtask;
+			private final int allowedLogSize;
 
-			public EnvironmentImpl() {
+            final class TimeoutTimerTask extends SafeTimerTask {
+                private final AbstractBuild build;
+                private final BuildListener listener;
 
-				logtask = new SafeTimerTask() {
-					public void doRun() {
-						Executor e = build.getExecutor();
-						if (e != null) {
-							if (build.getLogFile().length() > DESCRIPTOR.maxLogSizeBytes * 1024L * 1024L) {
-								if (!e.isInterrupted()) {
-									listener
-											.getLogger()
-											.println(
-													">>> Max Log Size reached. Aborting <<<");
+                private TimeoutTimerTask(AbstractBuild build, BuildListener listener) {
+                    this.build = build;
+                    this.listener = listener;
+                }
 
-									e.interrupt();
-								}
-								build.setResult(Result.FAILURE);
+                public void doRun() {
+                    Executor e = build.getExecutor();
+                    if (e != null) {
+                        if (build.getLogFile().length() > allowedLogSize * 1024L * 1024L) {
+                            if (!e.isInterrupted()) {
+                                listener
+                                        .getLogger()
+                                        .println(
+                                                ">>> Max Log Size reached. Aborting <<<");
+                                e.interrupt(failBuild? Result.FAILURE : Result.ABORTED);
+                            }
+                        }
+                    }
+                }
+            }
 
-							}
-						}
-					}
-				};
-				if (DESCRIPTOR.maxLogSizeBytes > 0)
-					Trigger.timer.scheduleAtFixedRate(logtask, 10000L, 10000L);
-			}
-
+            
+            public EnvironmentImpl() {
+                if (setOwn){
+                    allowedLogSize = maxLogSize;
+                } else {
+                    allowedLogSize = DESCRIPTOR.getDefaultLogSize();
+                }
+                
+                logtask = new TimeoutTimerTask(build, listener);
+                if (allowedLogSize > 0) {
+                    //TODO Periodenwert ändern!
+                    Trigger.timer.scheduleAtFixedRate(logtask, 100L, 100L);
+                }
+            }
+		    
 			@Override
 			public boolean tearDown(AbstractBuild build, BuildListener listener)
 					throws IOException, InterruptedException {
-
-				if (DESCRIPTOR.maxLogSizeBytes > 0)
+                if (allowedLogSize > 0) {
 					logtask.cancel();
+                }
+                listener.getLogger().println("erreicht: " + build.getLogFile().length());
 
+                //TODO anpassen an Vorlage bei BuildTimeOut-Plugin
 				return true;
 			}
+			
 		}
-
+		
 		listener.getLogger().println(
 				"Executor: " + build.getExecutor().getNumber());
 		return new EnvironmentImpl();
 	}
 
+    @Override
 	public Descriptor<BuildWrapper> getDescriptor() {
 		return DESCRIPTOR;
 	}
 
+	@Extension
 	public static final DescriptorImpl DESCRIPTOR = new DescriptorImpl();
 
 	public static final class DescriptorImpl extends BuildWrapperDescriptor {
-		public int maxLogSizeBytes;
+	    
+	    /** Meet the logger. */
+	    private static final Logger LOG = Logger.getLogger(DescriptorImpl.class.getName());
+
+	    /** If there is no job specific size set, this will be used. */
+	    private int defaultLogSize;
 
 		DescriptorImpl() {
 			super(LogfilesizecheckerWrapper.class);
@@ -90,35 +135,45 @@ public class LogfilesizecheckerWrapper extends BuildWrapper {
 		}
 
 		public String getDisplayName() {
-			return "Abort the build if it's log file size too big";
+			return "Abort the build if its log file size is too big";
 		}
 
 		public boolean isApplicable(AbstractProject<?, ?> item) {
 			return true;
 		}
-
-		public boolean configure(StaplerRequest req) throws FormException {
-
-			String size = req.getParameter("logfilesizechecker.maxLogSizeBytes");
-			if (size != null)
-				maxLogSizeBytes = Integer.parseInt(size);
-			else
-				maxLogSizeBytes = 0;
-
-			save();
-			return super.configure(req);
+		
+		public int getDefaultLogSize(){
+		    return defaultLogSize;
 		}
+		
+		public boolean configure(StaplerRequest req, JSONObject formData) throws FormException {
+            String size = formData.getString("defaultLogSize");
 
-		public int maxLogSizeBytes() {
-			return maxLogSizeBytes;
-		}
+            if (size != null) {
+                defaultLogSize = Integer.parseInt(size);
+            } else {
+                defaultLogSize = 0;
+            }
+            save();
+            return super.configure(req, formData);
+        }
 
-		public LogfilesizecheckerWrapper newInstance(StaplerRequest req)
-				throws Descriptor.FormException {
-			LogfilesizecheckerWrapper w = new LogfilesizecheckerWrapper();
-			req.bindParameters(w, "logfilesizechecker.");
-			return w;
-		}
+        @Override
+		public BuildWrapper newInstance(StaplerRequest req, JSONObject formData)
+				throws FormException {
+
+            JSONObject newData = new JSONObject();
+            newData.put("failBuild", formData.getString("failBuild"));
+            
+            if (formData.containsKey("setOwn")){
+                newData.put("setOwn", true);
+                JSONObject sizeObject = formData.getJSONObject("setOwn");
+                newData.put("maxLogSize", sizeObject.getString("maxLogSize"));
+            } else {
+                newData.put("setOwn", false);
+            }
+            
+            return super.newInstance(req, newData);
+        }
 	}
-
 }

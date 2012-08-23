@@ -1,3 +1,22 @@
 <j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form">
 
+<!--    <f:radioBlock name="logfilesizechecker" value="useDefault" title="Use default log size (${descriptor.getDefaultLogSize()} MB)" checked="${!instance.setOwn}"/>
+
+    <f:radioBlock name="logfilesizechecker" value="setOwn" title="Set job specific log size" checked="${instance.setOwn}">
+	    <f:entry title="Max Log Size in MB" field="maxLogSize" help="/plugin/logfilesizechecker/help-sizeConfig.html">
+    	   	<f:textbox/>
+		</f:entry>
+    </f:radioBlock>
+-->
+
+	<f:optionalBlock title="Set job specific maximum log file size instead of using the default (${descriptor.getDefaultLogSize()} MB)" checked="${instance.setOwn}" field="setOwn">
+	    <f:entry title="Max Log Size in MB" field="maxLogSize" help="/plugin/logfilesizechecker/help-sizeConfig.html">
+    	   	<f:textbox/>
+		</f:entry>
+    </f:optionalBlock>
+    
+	<f:entry title="Fail the build" field="failBuild" help="/plugin/logfilesizechecker/help-failConfig.html">
+    	<f:checkbox/>
+	</f:entry>
+
 </j:jelly>
