@@ -10,7 +10,7 @@
   <artifactId>logfilesizechecker</artifactId>
   <packaging>hpi</packaging>
   <name>Hudson build log file size checker plugin</name>
-  <description>Aborts a build if it's the log file size to big</description>
+  <description>Aborts a build if its log file gets too big</description>
   <version>1.0</version>
   <url>http://hudson.gotdns.com/wiki/display/HUDSON/logfilesizechecker+Plugin</url>
 </project>
