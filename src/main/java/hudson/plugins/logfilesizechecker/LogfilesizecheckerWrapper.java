@@ -89,8 +89,7 @@ public class LogfilesizecheckerWrapper extends BuildWrapper {
                 
                 logtask = new TimeoutTimerTask(build, listener);
                 if (allowedLogSize > 0) {
-                    //TODO Periodenwert ändern!
-                    Trigger.timer.scheduleAtFixedRate(logtask, 100L, 100L);
+                    Trigger.timer.scheduleAtFixedRate(logtask, 1000L, 1000L);
                 }
             }
 		    
@@ -101,8 +100,6 @@ public class LogfilesizecheckerWrapper extends BuildWrapper {
 					logtask.cancel();
                 }
                 listener.getLogger().println("erreicht: " + build.getLogFile().length());
-
-                //TODO anpassen an Vorlage bei BuildTimeOut-Plugin
 				return true;
 			}
 			

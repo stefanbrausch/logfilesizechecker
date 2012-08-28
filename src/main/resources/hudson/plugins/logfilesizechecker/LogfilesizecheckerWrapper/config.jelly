@@ -10,12 +10,12 @@
 -->
 
 	<f:optionalBlock title="Set job specific maximum log file size instead of using the default (${descriptor.getDefaultLogSize()} MB)" checked="${instance.setOwn}" field="setOwn">
-	    <f:entry title="Max Log Size in MB" field="maxLogSize" help="/plugin/logfilesizechecker/help-sizeConfig.html">
+	    <f:entry title="Max Log Size in MB" field="maxLogSize">
     	   	<f:textbox/>
 		</f:entry>
     </f:optionalBlock>
     
-	<f:entry title="Fail the build" field="failBuild" help="/plugin/logfilesizechecker/help-failConfig.html">
+	<f:entry title="Fail the build" field="failBuild">
     	<f:checkbox/>
 	</f:entry>
 
