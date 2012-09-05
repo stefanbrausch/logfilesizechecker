@@ -37,6 +37,13 @@ public class LogfilesizecheckerWrapper extends BuildWrapper {
     /** Fail the build rather than aborting it. */
     public boolean failBuild;
     
+    /**Period for timer task that checks the logfile size*/
+    private static final long PERIOD = 1000L;
+
+    /**Delay for timer task that checks the logfile size*/
+    private static final long DELAY = 1000L;
+    
+    /**Logger*/
     private static final Logger LOG = Logger.getLogger(LogfilesizecheckerWrapper.class.getName());
     
     @DataBoundConstructor
@@ -48,17 +55,16 @@ public class LogfilesizecheckerWrapper extends BuildWrapper {
     
     @Override
 	public Environment setUp(final AbstractBuild build, Launcher launcher,
-			final BuildListener listener) throws IOException,
-			InterruptedException {
+			final BuildListener listener) throws IOException {
 		class EnvironmentImpl extends Environment {
-			private final TimeoutTimerTask logtask;
+			private final LogSizeTimerTask logtask;
 			private final int allowedLogSize;
 
-            final class TimeoutTimerTask extends SafeTimerTask {
+            final class LogSizeTimerTask extends SafeTimerTask {
                 private final AbstractBuild build;
                 private final BuildListener listener;
 
-                private TimeoutTimerTask(AbstractBuild build, BuildListener listener) {
+                private LogSizeTimerTask(AbstractBuild build, BuildListener listener) {
                     this.build = build;
                     this.listener = listener;
                 }
@@ -87,9 +93,9 @@ public class LogfilesizecheckerWrapper extends BuildWrapper {
                     allowedLogSize = DESCRIPTOR.getDefaultLogSize();
                 }
                 
-                logtask = new TimeoutTimerTask(build, listener);
+                logtask = new LogSizeTimerTask(build, listener);
                 if (allowedLogSize > 0) {
-                    Trigger.timer.scheduleAtFixedRate(logtask, 1000L, 1000L);
+                    Trigger.timer.scheduleAtFixedRate(logtask, DELAY, PERIOD);
                 }
             }
 		    
@@ -109,6 +115,7 @@ public class LogfilesizecheckerWrapper extends BuildWrapper {
 				"Executor: " + build.getExecutor().getNumber());
 		return new EnvironmentImpl();
 	}
+    
 
     @Override
 	public Descriptor<BuildWrapper> getDescriptor() {
@@ -143,6 +150,11 @@ public class LogfilesizecheckerWrapper extends BuildWrapper {
 		    return defaultLogSize;
 		}
 		
+		//used for testing only
+		public void setDefaultLogSize(int a){
+		    defaultLogSize = a;
+		}
+		
 		public boolean configure(StaplerRequest req, JSONObject formData) throws FormException {
             String size = formData.getString("defaultLogSize");
 
@@ -158,15 +170,15 @@ public class LogfilesizecheckerWrapper extends BuildWrapper {
         @Override
 		public BuildWrapper newInstance(StaplerRequest req, JSONObject formData)
 				throws FormException {
-
+            
             JSONObject newData = new JSONObject();
             newData.put("failBuild", formData.getString("failBuild"));
             
-            if (formData.containsKey("setOwn")){
+            JSONObject sizeObject = formData.getJSONObject("logfilesizechecker");
+            if (sizeObject.getString("value").equals("setOwn")){
                 newData.put("setOwn", true);
-                JSONObject sizeObject = formData.getJSONObject("setOwn");
                 newData.put("maxLogSize", sizeObject.getString("maxLogSize"));
-            } else {
+            }else{
                 newData.put("setOwn", false);
             }
             
