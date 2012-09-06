@@ -14,8 +14,6 @@ import hudson.triggers.SafeTimerTask;
 import hudson.triggers.Trigger;
 
 import java.io.IOException;
-import java.util.logging.Logger;
-
 import net.sf.json.JSONObject;
 
 import org.kohsuke.stapler.DataBoundConstructor;
@@ -45,9 +43,6 @@ public class LogfilesizecheckerWrapper extends BuildWrapper {
 
     /**Conversion factor for Mega Bytes.*/
     private static final long MB = 1024L * 1024L;
-    
-    /**Logger.*/
-    private static final Logger LOG = Logger.getLogger(LogfilesizecheckerWrapper.class.getName());
     
     /**
      * Contructor for data binding of form data.
@@ -89,16 +84,12 @@ public class LogfilesizecheckerWrapper extends BuildWrapper {
                 /**Interrupts build if log file is too big.*/
                 public void doRun() {
                     final Executor e = build.getExecutor();
-                    if (e != null) {
-                        if (build.getLogFile().length() > allowedLogSize * MB) {
-                            if (!e.isInterrupted()) {
-                                listener
-                                        .getLogger()
-                                        .println(
-                                                ">>> Max Log Size reached. Aborting <<<");
-                                e.interrupt(failBuild ? Result.FAILURE : Result.ABORTED);
-                            }
-                        }
+                    if (e != null 
+                            && build.getLogFile().length() > allowedLogSize * MB 
+                            && !e.isInterrupted()) {
+                        listener.getLogger().println(
+                                ">>> Max Log Size reached. Aborting <<<");
+                        e.interrupt(failBuild ? Result.FAILURE : Result.ABORTED);
                     }
                 }
             }
@@ -149,9 +140,6 @@ public class LogfilesizecheckerWrapper extends BuildWrapper {
     /**The Descriptor for the BuildWrapper.*/
     public static final class DescriptorImpl extends BuildWrapperDescriptor {
 
-        /**Meet the logger.*/
-        private static final Logger LOG = Logger.getLogger(DescriptorImpl.class.getName());
-
         /**If there is no job specific size set, this will be used.*/
         private int defaultLogSize;
 
@@ -166,7 +154,8 @@ public class LogfilesizecheckerWrapper extends BuildWrapper {
          * @return caption
          */
         public String getDisplayName() {
-            return "Abort the build if its log file size is too big";
+            return Messages.Descriptor_DisplayName();
+//            return "Abort the build if its log file size is too big";
         }
 
         /**Certainly does something.
