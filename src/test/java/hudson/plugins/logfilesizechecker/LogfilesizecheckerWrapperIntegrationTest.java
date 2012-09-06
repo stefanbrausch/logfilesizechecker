@@ -83,5 +83,6 @@ public class LogfilesizecheckerWrapperIntegrationTest extends HudsonTestCase {
         LogfilesizecheckerWrapper after = p.getBuildWrappersList().get(LogfilesizecheckerWrapper.class);
         
         assertEqualBeans(before,after,"maxLogSize,failBuild,setOwn");
+        //assertEqualDataBoundBeans(before, after)
     }
 }
