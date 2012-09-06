@@ -28,7 +28,7 @@ import org.kohsuke.stapler.StaplerRequest;
  */
 public class LogfilesizecheckerWrapper extends BuildWrapper {
     
-    /** Set your own max size instaed of using the default */
+    /** Set your own max size instaed of using the default.*/
     public boolean setOwn;
 
     /** If the log file for the build has more MB, it will be terminated. */
@@ -37,15 +37,24 @@ public class LogfilesizecheckerWrapper extends BuildWrapper {
     /** Fail the build rather than aborting it. */
     public boolean failBuild;
     
-    /**Period for timer task that checks the logfile size*/
+    /**Period for timer task that checks the logfile size.*/
     private static final long PERIOD = 1000L;
 
-    /**Delay for timer task that checks the logfile size*/
+    /**Delay for timer task that checks the logfile size.*/
     private static final long DELAY = 1000L;
+
+    /**Conversion factor for Mega Bytes.*/
+    private static final long MB = 1024L * 1024L;
     
-    /**Logger*/
+    /**Logger.*/
     private static final Logger LOG = Logger.getLogger(LogfilesizecheckerWrapper.class.getName());
     
+    /**
+     * Contructor for data binding of form data.
+     * @param maxLogSize job specific maximum log size
+     * @param failBuild true if the build should be marked failed instead of aborted
+     * @param setOwn true if a job specific log size is set, false if global setting is used
+     */
     @DataBoundConstructor
     public LogfilesizecheckerWrapper(int maxLogSize, boolean failBuild, boolean setOwn) {
         this.maxLogSize = maxLogSize;
@@ -54,40 +63,52 @@ public class LogfilesizecheckerWrapper extends BuildWrapper {
     }
     
     @Override
-	public Environment setUp(final AbstractBuild build, Launcher launcher,
-			final BuildListener listener) throws IOException {
-		class EnvironmentImpl extends Environment {
-			private final LogSizeTimerTask logtask;
-			private final int allowedLogSize;
+    public Environment setUp(final AbstractBuild build, Launcher launcher,
+            final BuildListener listener) throws IOException {
+        
+        /**Environment of the BuildWrapper.*/
+        class EnvironmentImpl extends Environment {
+            private final LogSizeTimerTask logtask;
+            private final int allowedLogSize;
 
+            /**TimerTask that checks log file size in regular intervals.*/
             final class LogSizeTimerTask extends SafeTimerTask {
                 private final AbstractBuild build;
                 private final BuildListener listener;
 
+                /**
+                 * Constructor for TimerTask that checks log file size.
+                 * @param build the current build
+                 * @param listener BuildListener used for logging
+                 */
                 private LogSizeTimerTask(AbstractBuild build, BuildListener listener) {
                     this.build = build;
                     this.listener = listener;
                 }
-
+                
+                /**Interrupts build if log file is too big.*/
                 public void doRun() {
-                    Executor e = build.getExecutor();
+                    final Executor e = build.getExecutor();
                     if (e != null) {
-                        if (build.getLogFile().length() > allowedLogSize * 1024L * 1024L) {
+                        if (build.getLogFile().length() > allowedLogSize * MB) {
                             if (!e.isInterrupted()) {
                                 listener
                                         .getLogger()
                                         .println(
                                                 ">>> Max Log Size reached. Aborting <<<");
-                                e.interrupt(failBuild? Result.FAILURE : Result.ABORTED);
+                                e.interrupt(failBuild ? Result.FAILURE : Result.ABORTED);
                             }
                         }
                     }
                 }
             }
-
             
+            /**
+             * Constructor for Environment of BuildWrapper
+             * Finds correct maximum log size and starts timertask
+             */
             public EnvironmentImpl() {
-                if (setOwn){
+                if (setOwn) {
                     allowedLogSize = maxLogSize;
                 } else {
                     allowedLogSize = DESCRIPTOR.getDefaultLogSize();
@@ -98,65 +119,87 @@ public class LogfilesizecheckerWrapper extends BuildWrapper {
                     Trigger.timer.scheduleAtFixedRate(logtask, DELAY, PERIOD);
                 }
             }
-		    
-			@Override
-			public boolean tearDown(AbstractBuild build, BuildListener listener)
-					throws IOException, InterruptedException {
+
+            @Override
+            public boolean tearDown(AbstractBuild build, BuildListener listener)
+                throws IOException, InterruptedException {
                 if (allowedLogSize > 0) {
-					logtask.cancel();
+                    logtask.cancel();
                 }
                 listener.getLogger().println("erreicht: " + build.getLogFile().length());
-				return true;
-			}
-			
-		}
-		
-		listener.getLogger().println(
-				"Executor: " + build.getExecutor().getNumber());
-		return new EnvironmentImpl();
-	}
+                return true;
+            }
+        }
+        
+        listener.getLogger().println(
+                "Executor: " + build.getExecutor().getNumber());
+        return new EnvironmentImpl();
+    }
     
 
     @Override
-	public Descriptor<BuildWrapper> getDescriptor() {
-		return DESCRIPTOR;
-	}
+    public Descriptor<BuildWrapper> getDescriptor() {
+        return DESCRIPTOR;
+    }
 
-	@Extension
-	public static final DescriptorImpl DESCRIPTOR = new DescriptorImpl();
+    /**Creates descriptor for the BuildWrapper.*/
+    @Extension
+    public static final DescriptorImpl DESCRIPTOR = new DescriptorImpl();
 
-	public static final class DescriptorImpl extends BuildWrapperDescriptor {
-	    
-	    /** Meet the logger. */
-	    private static final Logger LOG = Logger.getLogger(DescriptorImpl.class.getName());
+    /**The Descriptor for the BuildWrapper.*/
+    public static final class DescriptorImpl extends BuildWrapperDescriptor {
 
-	    /** If there is no job specific size set, this will be used. */
-	    private int defaultLogSize;
+        /**Meet the logger.*/
+        private static final Logger LOG = Logger.getLogger(DescriptorImpl.class.getName());
 
-		DescriptorImpl() {
-			super(LogfilesizecheckerWrapper.class);
-			load();
-		}
+        /**If there is no job specific size set, this will be used.*/
+        private int defaultLogSize;
 
-		public String getDisplayName() {
-			return "Abort the build if its log file size is too big";
-		}
+        /**Constructor loads previously saved form data.*/
+        DescriptorImpl() {
+            super(LogfilesizecheckerWrapper.class);
+            load();
+        }
 
-		public boolean isApplicable(AbstractProject<?, ?> item) {
-			return true;
-		}
-		
-		public int getDefaultLogSize(){
-		    return defaultLogSize;
-		}
-		
-		//used for testing only
-		public void setDefaultLogSize(int a){
-		    defaultLogSize = a;
-		}
-		
-		public boolean configure(StaplerRequest req, JSONObject formData) throws FormException {
-            String size = formData.getString("defaultLogSize");
+        /**
+         * Returns caption for our part of the config page.
+         * @return caption
+         */
+        public String getDisplayName() {
+            return "Abort the build if its log file size is too big";
+        }
+
+        /**Certainly does something.
+         * @param item Some item, I guess
+         * @return true
+         */
+        public boolean isApplicable(AbstractProject<?, ?> item) {
+            return true;
+        }
+
+        /**
+         * Returns maximum log size set in global configuration.
+         * @return the globally set max log size
+         */
+        public int getDefaultLogSize() {
+            return defaultLogSize;
+        }
+
+        /**
+         * Allows changing the global log file size - used for testing only.
+         * @param size new default max log size
+         */
+        public void setDefaultLogSize(int size) {
+            defaultLogSize = size;
+        }
+
+        /**
+         * 
+         * 
+         * {@inheritDoc}
+         */
+        public boolean configure(StaplerRequest req, JSONObject formData) throws FormException {
+            final String size = formData.getString("defaultLogSize");
 
             if (size != null) {
                 defaultLogSize = Integer.parseInt(size);
@@ -168,21 +211,21 @@ public class LogfilesizecheckerWrapper extends BuildWrapper {
         }
 
         @Override
-		public BuildWrapper newInstance(StaplerRequest req, JSONObject formData)
-				throws FormException {
+        public BuildWrapper newInstance(StaplerRequest req, JSONObject formData)
+            throws FormException {
             
-            JSONObject newData = new JSONObject();
+            final JSONObject newData = new JSONObject();
             newData.put("failBuild", formData.getString("failBuild"));
             
-            JSONObject sizeObject = formData.getJSONObject("logfilesizechecker");
-            if (sizeObject.getString("value").equals("setOwn")){
+            final JSONObject sizeObject = formData.getJSONObject("logfilesizechecker");
+            if ("setOwn".equals(sizeObject.getString("value"))) {
                 newData.put("setOwn", true);
                 newData.put("maxLogSize", sizeObject.getString("maxLogSize"));
-            }else{
+            } else {
                 newData.put("setOwn", false);
             }
             
             return super.newInstance(req, newData);
         }
-	}
+    }
 }
